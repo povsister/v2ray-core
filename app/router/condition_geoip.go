@@ -2,6 +2,7 @@ package router
 
 import (
 	"net/netip"
+	"strings"
 
 	"go4.org/netipx"
 
@@ -14,6 +15,8 @@ type GeoIPMatcher struct {
 	reverseMatch bool
 	ip4          *netipx.IPSet
 	ip6          *netipx.IPSet
+
+	*dynamicIPMatcher
 }
 
 func (m *GeoIPMatcher) Init(cidrs []*routercommon.CIDR) error {
@@ -70,6 +73,13 @@ func (m *GeoIPMatcher) match6(ip net.IP) bool {
 // Match returns true if the given ip is included by the GeoIP.
 func (m *GeoIPMatcher) Match(ip net.IP) bool {
 	isMatched := false
+	if m.dynamicIPMatcher != nil {
+		isMatched = m.dynamicIPMatcher.Match(ip)
+		if m.reverseMatch {
+			return !isMatched
+		}
+		return isMatched
+	}
 	switch len(ip) {
 	case net.IPv4len:
 		isMatched = m.match4(ip)
@@ -102,8 +112,15 @@ func (c *GeoIPMatcherContainer) Add(geoip *routercommon.GeoIP) (*GeoIPMatcher, e
 		countryCode:  geoip.CountryCode,
 		reverseMatch: geoip.InverseMatch,
 	}
-	if err := m.Init(geoip.Cidr); err != nil {
-		return nil, err
+	if strings.HasPrefix(geoip.CountryCode, strings.ToUpper("dynamic-ipset:")) {
+		if err := m.InitDynamicMatcher(); err != nil {
+			return nil, err
+		}
+		newError("init dynamic ip matcher: " + geoip.CountryCode + " done").AtDebug().WriteToLog()
+	} else {
+		if err := m.Init(geoip.Cidr); err != nil {
+			return nil, err
+		}
 	}
 	if geoip.CountryCode != "" {
 		c.matchers = append(c.matchers, m)

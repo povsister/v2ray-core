@@ -13,6 +13,7 @@ require (
 	github.com/golang/protobuf v1.5.4
 	github.com/google/go-cmp v0.6.0
 	github.com/google/gopacket v1.1.19
+	github.com/gopacket/gopacket v1.2.0
 	github.com/gorilla/websocket v1.5.1
 	github.com/jhump/protoreflect v1.16.0
 	github.com/lunixbochs/struc v0.0.0-20200707160740-784aaebc1d40
@@ -85,3 +86,5 @@ require (
 )
 
 replace github.com/lunixbochs/struc v0.0.0-20200707160740-784aaebc1d40 => github.com/xiaokangwang/struc v0.0.0-20231031203518-0e381172f248
+
+replace github.com/gopacket/gopacket v1.2.0 => github.com/povsister/gopacket v0.0.0-20240411023526-b3b06fd33480

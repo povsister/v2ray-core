@@ -138,6 +138,10 @@ func (g *Instance) Handle(msg log.Message) {
 		if g.errorLogger != nil && msg.Severity <= g.config.Error.Level {
 			g.errorLogger.Handle(msg)
 		}
+	case *log.PrefixMessage:
+		if g.errorLogger != nil {
+			g.errorLogger.Handle(msg)
+		}
 	default:
 		// Swallow
 	}
