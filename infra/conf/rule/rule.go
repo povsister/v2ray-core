@@ -142,6 +142,17 @@ func toCidrList(ctx context.Context, ips cfgcommon.StringList) ([]*routercommon.
 			continue
 		}
 
+		// Dynamic routing rules for programmable use.
+		// See features/routing/dynamic_routing.go
+		if strings.HasPrefix(ip, "dynamic-ipset:") {
+			geoipList = append(geoipList, &routercommon.GeoIP{
+				CountryCode:  strings.ToUpper(ip), // use entire name as country code
+				Cidr:         nil,                 // left empty for program use.
+				InverseMatch: false,               // inverseMatch is not supported yet.
+			})
+			continue
+		}
+
 		isExtDatFile := 0
 		{
 			const prefix = "ext:"

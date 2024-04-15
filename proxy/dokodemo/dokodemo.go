@@ -4,6 +4,7 @@ package dokodemo
 
 import (
 	"context"
+	"net/netip"
 	"sync/atomic"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/v2fly/v2ray-core/v5/common/task"
 	"github.com/v2fly/v2ray-core/v5/features/policy"
 	"github.com/v2fly/v2ray-core/v5/features/routing"
+	"github.com/v2fly/v2ray-core/v5/proxy"
 	"github.com/v2fly/v2ray-core/v5/transport/internet"
 )
 
@@ -49,6 +51,7 @@ type Door struct {
 	address       net.Address
 	port          net.Port
 	sockopt       *session.Sockopt
+	*proxy.ActivityObserver
 }
 
 // Init initializes the Door instance with necessary parameters.
@@ -61,6 +64,7 @@ func (d *Door) Init(config *Config, pm policy.Manager, sockopt *session.Sockopt)
 	d.port = net.Port(config.Port)
 	d.policyManager = pm
 	d.sockopt = sockopt
+	d.ActivityObserver = proxy.NewActivityObserver()
 
 	return nil
 }
@@ -137,6 +141,16 @@ func (d *Door) Process(ctx context.Context, network net.Network, conn internet.C
 		return newError("failed to dispatch request").Base(err)
 	}
 
+	addrPort, err := netip.ParseAddrPort(conn.RemoteAddr().String())
+	if err != nil {
+		return newError("failed to parse remote connAddr").Base(err)
+	}
+	onSendUpdater, onRecvUpdater := d.GetAllActivityUpdater(net.Destination{
+		Address: net.IPAddress(addrPort.Addr().AsSlice()),
+		Port:    net.Port(addrPort.Port()),
+		Network: network,
+	}, dest)
+
 	requestCount := int32(1)
 	requestDone := func() error {
 		defer func() {
@@ -151,7 +165,7 @@ func (d *Door) Process(ctx context.Context, network net.Network, conn internet.C
 		} else {
 			reader = buf.NewReader(conn)
 		}
-		if err := buf.Copy(reader, link.Writer, buf.UpdateActivity(timer)); err != nil {
+		if err := buf.Copy(reader, link.Writer, buf.UpdateActivity(timer), buf.UpdateActivity(onSendUpdater)); err != nil {
 			return newError("failed to transport request").Base(err)
 		}
 
@@ -195,7 +209,7 @@ func (d *Door) Process(ctx context.Context, network net.Network, conn internet.C
 						timer.SetTimeout(plcy.Timeouts.DownlinkOnly)
 					}
 				}()
-				if err := buf.Copy(tReader, link.Writer, buf.UpdateActivity(timer)); err != nil {
+				if err := buf.Copy(tReader, link.Writer, buf.UpdateActivity(timer), buf.UpdateActivity(onSendUpdater)); err != nil {
 					return newError("failed to transport request (TPROXY conn)").Base(err)
 				}
 				return nil
@@ -206,7 +220,7 @@ func (d *Door) Process(ctx context.Context, network net.Network, conn internet.C
 	responseDone := func() error {
 		defer timer.SetTimeout(plcy.Timeouts.UplinkOnly)
 
-		if err := buf.Copy(link.Reader, writer, buf.UpdateActivity(timer)); err != nil {
+		if err := buf.Copy(link.Reader, writer, buf.UpdateActivity(timer), buf.UpdateActivity(onRecvUpdater)); err != nil {
 			return newError("failed to transport response").Base(err)
 		}
 		return nil

@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package v2ray.core.app.dnscircuit;
+option csharp_namespace = "V2Ray.Core.App.DnsCircuit";
+option go_package = "github.com/v2fly/v2ray-core/v5/app/dnscircuit";
+option java_package = "com.v2ray.core.app.dnscircuit";
+option java_multiple_files = true;
+
+import "common/protoext/extensions.proto";
+import "app/router/routercommon/common.proto";
+
+message Config{
+  option (v2ray.core.common.protoext.message_opt).type = "service";
+  option (v2ray.core.common.protoext.message_opt).short_name = "dnscircuit";
+
+  // Tagged inbounds for incoming connection observation,
+  // It renews associated route records when activity seen on given tagged inbounds.
+  // Routes are normally renewed by regular DNS lookups,
+  // this is only a backup routine to renew active routing table entries.
+  repeated string inbound_tags = 1;
+  // Tags to filter out certain outgoing connection,
+  // Domains with its resolved addresses will be both sent to v2ray's router
+  // to determine which outbound it should take.
+  // If the tag of taken outbound matches any tag given here, the routing entries to
+  // domain's addresses will be announced immediately.
+  repeated string outbound_tags = 2;
+  // Tag for dns outbound for intercepting & analyzing incoming DNS traffic.
+  string dns_outbound_tag = 3;
+  // Seconds to clean inactive routes.
+  int64 inactive_clean = 4;
+  // OSPFv2 settings
+  OSPFInstanceConfig ospf_setting = 5;
+  // persistent route CIDRs to announce when v2ray starts.
+  // Only geoip and IPv4 CIDRs are supported.
+  repeated v2ray.core.app.router.routercommon.GeoIP persistent_route = 6;
+}
+
+message OSPFInstanceConfig {
+  // net interface name
+  string if_name = 1;
+  // listen address and network mask
+  v2ray.core.app.router.routercommon.CIDR address = 2;
+}
