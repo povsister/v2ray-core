@@ -28,14 +28,15 @@ import (
 
 var (
 	inboundConfigLoader = loader.NewJSONConfigLoader(loader.ConfigCreatorCache{
-		"dokodemo-door": func() interface{} { return new(DokodemoConfig) },
-		"http":          func() interface{} { return new(HTTPServerConfig) },
-		"shadowsocks":   func() interface{} { return new(ShadowsocksServerConfig) },
-		"socks":         func() interface{} { return new(SocksServerConfig) },
-		"vless":         func() interface{} { return new(VLessInboundConfig) },
-		"vmess":         func() interface{} { return new(VMessInboundConfig) },
-		"trojan":        func() interface{} { return new(TrojanServerConfig) },
-		"hysteria2":     func() interface{} { return new(Hysteria2ServerConfig) },
+		"dokodemo-door":    func() interface{} { return new(DokodemoConfig) },
+		"http":             func() interface{} { return new(HTTPServerConfig) },
+		"http-healthcheck": func() interface{} { return new(HttpHealthCheckConfig) },
+		"shadowsocks":      func() interface{} { return new(ShadowsocksServerConfig) },
+		"socks":            func() interface{} { return new(SocksServerConfig) },
+		"vless":            func() interface{} { return new(VLessInboundConfig) },
+		"vmess":            func() interface{} { return new(VMessInboundConfig) },
+		"trojan":           func() interface{} { return new(TrojanServerConfig) },
+		"hysteria2":        func() interface{} { return new(Hysteria2ServerConfig) },
 	}, "protocol", "settings")
 
 	outboundConfigLoader = loader.NewJSONConfigLoader(loader.ConfigCreatorCache{
@@ -325,6 +326,7 @@ type Config struct {
 	Observatory      *ObservatoryConfig      `json:"observatory"`
 	BurstObservatory *BurstObservatoryConfig `json:"burstObservatory"`
 	MultiObservatory *MultiObservatoryConfig `json:"multiObservatory"`
+	DNSCircuit       *DNSCircuitConfig       `json:"dnsCircuit"`
 
 	Services map[string]*json.RawMessage `json:"services"`
 }
@@ -434,6 +436,14 @@ func (c *Config) Build() (*core.Config, error) {
 			return nil, newError("failed to parse DNS config").Base(err)
 		}
 		config.App = append(config.App, serial.ToTypedMessage(dnsApp))
+	}
+
+	if c.DNSCircuit != nil {
+		cApp, err := c.DNSCircuit.Build()
+		if err != nil {
+			return nil, newError("failed to parse DNS circuit config").Base(err)
+		}
+		config.App = append(config.App, serial.ToTypedMessage(cApp))
 	}
 
 	if c.Policy != nil {

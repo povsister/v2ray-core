@@ -3,6 +3,7 @@ package dns
 import (
 	"context"
 	"io"
+	"strings"
 	"sync"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/v2fly/v2ray-core/v5/common/task"
 	"github.com/v2fly/v2ray-core/v5/features/dns"
 	"github.com/v2fly/v2ray-core/v5/features/policy"
+	"github.com/v2fly/v2ray-core/v5/proxy"
 	"github.com/v2fly/v2ray-core/v5/transport"
 	"github.com/v2fly/v2ray-core/v5/transport/internet"
 )
@@ -53,6 +55,7 @@ type Handler struct {
 	ownLinkVerifier ownLinkVerifier
 	server          net.Destination
 	timeout         time.Duration
+	observers       map[string]proxy.DNSOutBoundNoticeFn
 }
 
 func (h *Handler) Init(config *Config, dnsClient dns.Client, policyManager policy.Manager) error {
@@ -62,6 +65,7 @@ func (h *Handler) Init(config *Config, dnsClient dns.Client, policyManager polic
 	}
 	h.client = dnsClient
 	h.timeout = policyManager.ForLevel(config.UserLevel).Timeouts.ConnectionIdle
+	h.observers = make(map[string]proxy.DNSOutBoundNoticeFn)
 
 	if ipv4lookup, ok := dnsClient.(dns.IPv4Lookup); ok {
 		h.ipv4Lookup = ipv4lookup
@@ -196,7 +200,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.
 				isIPQuery, domain, id, qType := parseIPQuery(b.Bytes())
 				if isIPQuery {
 					if domain, err := strmatcher.ToDomain(domain); err == nil {
-						go h.handleIPQuery(id, qType, domain, writer)
+						go h.handleIPQuery(ctx, id, qType, domain, writer)
 						continue
 					}
 				}
@@ -234,7 +238,21 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.
 	return nil
 }
 
-func (h *Handler) handleIPQuery(id uint16, qType dnsmessage.Type, domain string, writer dns_proto.MessageWriter) {
+func (h *Handler) RegisterDNSOutBoundObserver(obName string, notice proxy.DNSOutBoundNoticeFn) {
+	h.observers[obName] = notice
+}
+
+func (h *Handler) UnregisterDNSOutBoundObserver(obName string) {
+	delete(h.observers, obName)
+}
+
+func (h *Handler) observeDNSOutBound(ctx context.Context, domain string, results []net.IP, err error) {
+	for _, ob := range h.observers {
+		ob(ctx, domain, results, err)
+	}
+}
+
+func (h *Handler) handleIPQuery(ctx context.Context, id uint16, qType dnsmessage.Type, domain string, writer dns_proto.MessageWriter) {
 	var ips []net.IP
 	var err error
 
@@ -246,6 +264,8 @@ func (h *Handler) handleIPQuery(id uint16, qType dnsmessage.Type, domain string,
 	case dnsmessage.TypeAAAA:
 		ips, err = h.ipv6Lookup.LookupIPv6(domain)
 	}
+	// always trim root domain
+	h.observeDNSOutBound(ctx, strings.TrimRight(domain, "."), ips, err)
 
 	rcode := dns.RCodeFromError(err)
 	if rcode == 0 && len(ips) == 0 && err != dns.ErrEmptyResponse {
