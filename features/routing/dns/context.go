@@ -3,6 +3,8 @@ package dns
 //go:generate go run github.com/v2fly/v2ray-core/v5/common/errors/errorgen
 
 import (
+	"strings"
+
 	"github.com/v2fly/v2ray-core/v5/common/net"
 	"github.com/v2fly/v2ray-core/v5/features/dns"
 	"github.com/v2fly/v2ray-core/v5/features/routing"
@@ -41,4 +43,49 @@ func (ctx *ResolvableContext) GetTargetIPs() []net.IP {
 // Resolved domain IPs can be retrieved by GetTargetIPs().
 func ContextWithDNSClient(ctx routing.Context, client dns.Client) routing.Context {
 	return &ResolvableContext{Context: ctx, dnsClient: client}
+}
+
+// RoutingContextWithSkipDynamicRule is an optional feature for routing context, to
+// control the behavior of whether skip certain dynamic rule while rule matching.
+// By default, all rules are checked.
+type RoutingContextWithSkipDynamicRule interface {
+	routing.Context
+	GetSkipDynamicRuleIP(ruleName string) bool
+	GetSkipDynamicRuleDomain(ruleName string) bool
+}
+
+type SkipDynamicRuleContext struct {
+	routing.Context
+	skipRuleNameIP     string
+	skipRuleNameDomain string // TODO: not used yet
+}
+
+func (ctx *SkipDynamicRuleContext) GetSkipDynamicRuleIP(ruleName string) bool {
+	ruleName = strings.ToUpper(ruleName)
+	if ctx.skipRuleNameIP == ruleName {
+		return true
+	}
+	if sCtx, ok := ctx.Context.(RoutingContextWithSkipDynamicRule); ok {
+		return sCtx.GetSkipDynamicRuleIP(ruleName)
+	}
+	return false
+}
+
+func (ctx *SkipDynamicRuleContext) GetSkipDynamicRuleDomain(ruleName string) bool {
+	ruleName = strings.ToUpper(ruleName)
+	if ctx.skipRuleNameDomain == ruleName {
+		return true
+	}
+	if sCtx, ok := ctx.Context.(RoutingContextWithSkipDynamicRule); ok {
+		return sCtx.GetSkipDynamicRuleDomain(ruleName)
+	}
+	return false
+}
+
+func ContextWithSkippingDynamicRule(ctx routing.Context, ruleNameIP, ruleNameDomain string) routing.Context {
+	return &SkipDynamicRuleContext{
+		Context:            ctx,
+		skipRuleNameIP:     strings.ToUpper(ruleNameIP),
+		skipRuleNameDomain: ruleNameDomain,
+	}
 }

@@ -1,6 +1,7 @@
 package router
 
 import (
+	"fmt"
 	"strings"
 
 	"go.starlark.net/starlark"
@@ -9,7 +10,9 @@ import (
 	"github.com/v2fly/v2ray-core/v5/app/router/routercommon"
 	"github.com/v2fly/v2ray-core/v5/common/net"
 	"github.com/v2fly/v2ray-core/v5/common/strmatcher"
+	dns_feature "github.com/v2fly/v2ray-core/v5/features/dns"
 	"github.com/v2fly/v2ray-core/v5/features/routing"
+	routing_dns "github.com/v2fly/v2ray-core/v5/features/routing/dns"
 )
 
 type Condition interface {
@@ -134,10 +137,30 @@ func (m *MultiGeoIPMatcher) Apply(ctx routing.Context) bool {
 	} else {
 		ips = ctx.GetTargetIPs()
 	}
+	sCtx, ok := ctx.(routing_dns.RoutingContextWithSkipDynamicRule)
 	for _, ip := range ips {
 		for _, matcher := range m.matchers {
-			if matcher.Match(ip) {
-				return true
+			if ok && sCtx.GetSkipDynamicRuleIP(matcher.countryCode) {
+				newError(fmt.Sprintf("geoip matcher skip dynamic rule %s while looking up %s",
+					matcher.countryCode, ip.String())).
+					AtDebug().WriteToLog()
+				continue
+			}
+			// conn-track matching works on dest selection
+			if !m.onSource && matcher.dynamicIPMatcher != nil &&
+				strings.HasPrefix(matcher.countryCode, strings.ToUpper(dns_feature.DynamicIPSetDNSCircuitConnTrackDestPrefix)) {
+				for _, srcIP := range ctx.GetSourceIPs() {
+					if matcher.ConnTrackMatch(srcIP, ip) {
+						newError(fmt.Sprintf("geoip conn-track %s -> %s matched dynamic rule %s",
+							srcIP.String(), ip.String(), matcher.countryCode)).
+							AtDebug().WriteToLog()
+						return true
+					}
+				}
+			} else {
+				if matcher.Match(ip) {
+					return true
+				}
 			}
 		}
 	}
