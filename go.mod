@@ -15,6 +15,7 @@ require (
 	github.com/golang/protobuf v1.5.4
 	github.com/google/go-cmp v0.7.0
 	github.com/google/gopacket v1.1.19
+	github.com/gopacket/gopacket v1.2.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/improbable-eng/grpc-web v0.15.0
 	github.com/jhump/protoreflect v1.17.0
@@ -95,3 +96,5 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250218202821-56aae31c358a // indirect
 	nhooyr.io/websocket v1.8.6 // indirect
 )
+
+replace github.com/gopacket/gopacket v1.2.0 => github.com/povsister/gopacket v0.0.0-20240411023526-b3b06fd33480
