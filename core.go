@@ -24,6 +24,12 @@ var (
 	intro    = "A unified platform for anti-censorship."
 )
 
+func init() {
+	build += "+DnsCircuit"
+	intro += "\nThis is a modified V2Ray core by povsister." +
+		"\nSee https://github.com/povsister/v2ray-core"
+}
+
 // Version returns V2Ray's version as a string, in the form of "x.y.z" where x, y and z are numbers.
 // ".z" part may be omitted in regular releases.
 func Version() string {
