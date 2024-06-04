@@ -3,6 +3,7 @@ package dnscircuit
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/v2fly/v2ray-core/v5/app/dnscircuit/ospf"
 	"github.com/v2fly/v2ray-core/v5/app/router/routercommon"
@@ -24,10 +25,11 @@ type dnsCircuit struct {
 	ohm         outbound.Manager
 	obDNSOut    proxy.ObservableDNSOutBound
 
-	ospfIfName string
-	ospfIfAddr net.IPNet
-	ospfRtId   string
-	ospf       *ospf.Router
+	ospfIfName    string
+	ospfIfAddr    net.IPNet
+	ospfRtId      string
+	ospf          *ospf.Router
+	inactiveClean time.Duration
 
 	ob              *observer
 	persistentRoute []*routercommon.GeoIP
@@ -64,6 +66,7 @@ func (s *dnsCircuit) Init(ctx context.Context, c *Config, router routing.Router,
 		return newError("err init ospf router instance").Base(err)
 	}
 	s.ospf = rt
+	s.inactiveClean = time.Duration(c.InactiveClean) * time.Second
 
 	// all other fields
 	s.persistentRoute = c.PersistentRoute
