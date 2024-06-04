@@ -285,9 +285,6 @@ func (s *observer) initObStatGC() {
 }
 
 func (s *observer) doObStatGC() {
-	const (
-		inactiveDur = 6 * time.Hour
-	)
 	var (
 		revokeIPs   []net.IPNet
 		revokedKeys []obDestMetaKey
@@ -301,13 +298,13 @@ func (s *observer) doObStatGC() {
 
 	s.obDestStatRw.Lock()
 	for k, meta := range s.obDestStat {
-		if !meta.isPersistent && meta.durSinceLastAnnounce() >= inactiveDur {
+		if !meta.isPersistent && meta.durSinceLastAnnounce() >= s.c.inactiveClean {
 			ipNet := k.ipNet()
 			revokeIPs = append(revokeIPs, ipNet)
 			revokedKeys = append(revokedKeys, k)
 			meta.isOutdated = true
 			ospf.LogImportant("revoking domain: %s due to %s inactive. route CIDR: %s",
-				meta.domain, inactiveDur.String(), PrettyPrintIPNet(ipNet))
+				meta.domain, s.c.inactiveClean.String(), PrettyPrintIPNet(ipNet))
 		}
 	}
 	for _, k := range revokedKeys {
@@ -327,7 +324,7 @@ func (s *observer) doObStatGC() {
 			toDeleteDest []obDestMetaKey
 		)
 		for destIPNet, destMeta := range clientMeta.destMeta {
-			if destMeta.g.isOutdated || destMeta.durSinceLastAccess() >= inactiveDur {
+			if destMeta.g.isOutdated || destMeta.durSinceLastAccess() >= s.c.inactiveClean {
 				tag := destMeta.getOutTag()
 				ips := revokeDestTracks[tag]
 				ips = append(ips, destIPNet.ipNet())
@@ -350,7 +347,7 @@ func (s *observer) doObStatGC() {
 				continue
 			}
 			ospf.LogImportant("revoking conn-track ip rule for outbound:%s due to %s inactive: %s -> %s",
-				tag, inactiveDur.String(), clientAddr.String(), PrettyPrintIPNet(ips...))
+				tag, s.c.inactiveClean.String(), clientAddr.String(), PrettyPrintIPNet(ips...))
 			s.dynDestRuleIP[dns_feature.DynamicIPSetDNSCircuitConnTrackDestPrefix+tag].RemoveIPNetConnTrack(clientAddr.AsSlice(), ips...)
 		}
 		clear(revokeDestTracks)
