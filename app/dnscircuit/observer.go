@@ -574,14 +574,14 @@ func (s *observer) addConnTrack(e observedEvent, dests []net.IPNet, metas []*obD
 		newError(fmt.Sprintf("adding dynamic src %s conn-track rules in %s",
 			e.from.Address.IP().String(), dns_feature.DynamicIPSetDNSCircuitConnTrackSrcPrefix+tag)).
 			AtDebug().WriteToLog()
-		s.dynSrcRuleIP[dns_feature.DynamicIPSetDNSCircuitConnTrackSrcPrefix+tag].AddIPNet(net.IPNet{
-			IP: e.from.Address.IP(), Mask: maskHost,
-		})
 	}
 
 	if len(toAddDest) > 0 {
 		ospf.LogImportant("adding conn-track ip rule for outbound:%s domain: %s : %s -> %s",
 			tag, e.d, e.from.Address.String(), PrettyPrintIPNet(toAddDest...))
+		s.dynSrcRuleIP[dns_feature.DynamicIPSetDNSCircuitConnTrackSrcPrefix+tag].AddIPNet(net.IPNet{
+			IP: e.from.Address.IP(), Mask: maskHost,
+		})
 		s.dynDestRuleIP[dns_feature.DynamicIPSetDNSCircuitConnTrackDestPrefix+tag].AddIPNetConnTrack(e.from.Address.IP(), toAddDest...)
 	}
 }
