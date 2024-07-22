@@ -18,6 +18,7 @@ import (
 type DNSCircuitConfig struct {
 	InboundTags    cfgcommon.StringList `json:"inboundTags"`
 	OutboundTags   cfgcommon.StringList `json:"outboundTags"`
+	BalancerTags   cfgcommon.StringList `json:"balancerTags"`
 	DNSOutboundTag string               `json:"dnsOutboundTag"`
 	InactiveClean  int64                `json:"inactiveClean"`
 	OspfSetting    struct {
@@ -65,11 +66,11 @@ func (b *DNSCircuitConfig) Build() (proto.Message, error) {
 	}
 
 	// tags validate
-	if len(b.OutboundTags) <= 0 {
-		return nil, newError("outbound tags can not be empty")
+	if len(b.OutboundTags) <= 0 && len(b.BalancerTags) <= 0 {
+		return nil, newError("outboundTags or balancerTags can not be empty")
 	}
 	if len(b.DNSOutboundTag) <= 0 {
-		return nil, newError("dnsOutbound tag can not be empty")
+		return nil, newError("dnsOutboundTag can not be empty")
 	}
 	if b.InactiveClean <= 0 {
 		b.InactiveClean = 6 * 60 * 60 // default 6 hours
@@ -82,6 +83,7 @@ func (b *DNSCircuitConfig) Build() (proto.Message, error) {
 	return &dnscircuit.Config{
 		InboundTags:     b.InboundTags,
 		OutboundTags:    b.OutboundTags,
+		BalancerTags:    b.BalancerTags,
 		DnsOutboundTag:  b.DNSOutboundTag,
 		PersistentRoute: persistentIPs,
 		InactiveClean:   b.InactiveClean,
