@@ -24,15 +24,16 @@ message Config{
   // If the tag of taken outbound matches any tag given here, the routing entries to
   // domain's addresses will be announced immediately.
   repeated string outbound_tags = 2;
+  repeated string balancer_tags = 3;
   // Tag for dns outbound for intercepting & analyzing incoming DNS traffic.
-  string dns_outbound_tag = 3;
+  string dns_outbound_tag = 4;
   // Seconds to clean inactive routes.
-  int64 inactive_clean = 4;
+  int64 inactive_clean = 5;
   // OSPFv2 settings
-  OSPFInstanceConfig ospf_setting = 5;
+  OSPFInstanceConfig ospf_setting = 6;
   // persistent route CIDRs to announce when v2ray starts.
   // Only geoip and IPv4 CIDRs are supported.
-  repeated v2ray.core.app.router.routercommon.GeoIP persistent_route = 6;
+  repeated v2ray.core.app.router.routercommon.GeoIP persistent_route = 7;
 }
 
 message OSPFInstanceConfig {
