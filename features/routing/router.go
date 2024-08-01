@@ -15,6 +15,16 @@ type Router interface {
 	PickRoute(ctx Context) (Route, error)
 }
 
+type RouterB interface {
+	Router
+	PickRouteB(ctx Context) (RouteB, error)
+}
+
+type RouteB interface {
+	Route
+	GetBalancerTag() string
+}
+
 // Route is the routing result of Router feature.
 //
 // v2ray:api:stable

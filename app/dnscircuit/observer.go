@@ -53,24 +53,26 @@ type obConnTrackMeta struct {
 }
 
 type connTrackDestMeta struct {
-	src          netip.Addr
-	g            *obDestMeta
-	rw           sync.RWMutex
-	lastAccessed time.Time
-	domain       string
-	outboundTag  string
+	src           netip.Addr
+	g             *obDestMeta
+	rw            sync.RWMutex
+	lastAccessed  time.Time
+	domain        string
+	outboundTag   string
+	isBalancerTag bool
 }
 
-func (ock *connTrackDestMeta) getOutTag() string {
+func (ock *connTrackDestMeta) getOutTag() (string, bool) {
 	ock.rw.RLock()
 	defer ock.rw.RUnlock()
-	return ock.outboundTag
+	return ock.outboundTag, ock.isBalancerTag
 }
 
-func (ock *connTrackDestMeta) setOutTag(tag string) {
+func (ock *connTrackDestMeta) setOutTag(tag string, isBalancer bool) {
 	ock.rw.Lock()
 	defer ock.rw.Unlock()
 	ock.outboundTag = tag
+	ock.isBalancerTag = isBalancer
 }
 
 func (ock *connTrackDestMeta) updateLastAccessed(d string) {
@@ -150,11 +152,18 @@ func (s *dnsCircuit) initObserver() error {
 	if dynDestIPset == nil {
 		return newError(fmt.Sprintf("route default dest rule %s not found", dns_feature.DynamicIPSetDnsCircuitDestDefault))
 	}
-	srcConnTrackIPset := make(map[string]routing.DynamicRuleIP, len(s.expectTags))
-	destConnTrackIPset := make(map[string]routing.DynamicRuleIP, len(s.expectTags))
+	allOutboundTags := make(map[string]struct{}, len(s.expectTags)+len(s.expectBalancerTags))
+	for tag := range s.expectTags {
+		allOutboundTags[tag] = struct{}{}
+	}
+	for tag := range s.expectBalancerTags {
+		allOutboundTags[tag] = struct{}{}
+	}
+	srcConnTrackIPset := make(map[string]routing.DynamicRuleIP, len(allOutboundTags))
+	destConnTrackIPset := make(map[string]routing.DynamicRuleIP, len(allOutboundTags))
 	// init skip rules
 	rtCtx = origRtCtx
-	for outTag := range s.expectTags {
+	for outTag := range allOutboundTags {
 		srcIPsetRuleName := dns_feature.DynamicIPSetDNSCircuitConnTrackSrcPrefix + outTag
 		if srcTrackRule := s.dynRouter.GetDynamicRuleIP(srcIPsetRuleName); srcTrackRule == nil {
 			return newError(fmt.Sprintf("route src-track rule %s not found", srcIPsetRuleName))
@@ -312,8 +321,12 @@ func (s *observer) doObStatGC() {
 	}
 	s.obDestStatRw.Unlock()
 
+	type outMeta struct {
+		tag        string
+		isBalancer bool
+	}
 	var (
-		revokeDestTracks   = make(map[string][]net.IPNet)
+		revokeDestTracks   = make(map[outMeta][]net.IPNet)
 		emptyClients       []netip.Addr
 		emptyClientsIPnets []net.IPNet
 	)
@@ -325,10 +338,11 @@ func (s *observer) doObStatGC() {
 		)
 		for destIPNet, destMeta := range clientMeta.destMeta {
 			if destMeta.g.isOutdated || destMeta.durSinceLastAccess() >= s.c.inactiveClean {
-				tag := destMeta.getOutTag()
-				ips := revokeDestTracks[tag]
+				tag, isB := destMeta.getOutTag()
+				om := outMeta{tag: tag, isBalancer: isB}
+				ips := revokeDestTracks[om]
 				ips = append(ips, destIPNet.ipNet())
-				revokeDestTracks[tag] = ips
+				revokeDestTracks[om] = ips
 				toDeleteDest = append(toDeleteDest, destIPNet)
 			}
 		}
@@ -346,9 +360,9 @@ func (s *observer) doObStatGC() {
 			if len(ips) <= 0 {
 				continue
 			}
-			ospf.LogImportant("revoking conn-track ip rule for outbound:%s due to %s inactive: %s -> %s",
-				tag, s.c.inactiveClean.String(), clientAddr.String(), PrettyPrintIPNet(ips...))
-			s.dynDestRuleIP[dns_feature.DynamicIPSetDNSCircuitConnTrackDestPrefix+tag].RemoveIPNetConnTrack(clientAddr.AsSlice(), ips...)
+			ospf.LogImportant("revoking conn-track ip rule for %s:%s due to %s inactive: %s -> %s",
+				outName(tag.isBalancer), tag, s.c.inactiveClean.String(), clientAddr.String(), PrettyPrintIPNet(ips...))
+			s.dynDestRuleIP[dns_feature.DynamicIPSetDNSCircuitConnTrackDestPrefix+tag.tag].RemoveIPNetConnTrack(clientAddr.AsSlice(), ips...)
 		}
 		clear(revokeDestTracks)
 	}
@@ -453,9 +467,10 @@ var defaultMask = net.CIDRMask(32, 32)
 
 func (s *observer) procEvent(e observedEvent) {
 	var (
-		qualifiedIP []net.IP
-		finalIP     []net.IP
-		finalTag    string
+		qualifiedIP   []net.IP
+		finalIP       []net.IP
+		isBalancerTag bool
+		finalTag      string
 	)
 	pbCtx.TargetDomain = e.d
 	pbCtx.TargetIPs = pbCtx.TargetIPs[0:0]
@@ -469,7 +484,7 @@ func (s *observer) procEvent(e observedEvent) {
 	if len(qualifiedIP) <= 0 {
 		return
 	}
-	pickRt, err := s.c.dynRouter.PickRoute(rtCtx)
+	pickRt, err := s.c.dynRouter.PickRouteB(rtCtx)
 	if err != nil {
 		if errors.Is(err, common.ErrNoClue) {
 			finalTag = s.c.ohm.GetDefaultHandler().Tag()
@@ -482,8 +497,13 @@ func (s *observer) procEvent(e observedEvent) {
 		}
 	} else {
 		finalTag = pickRt.GetOutboundTag()
+		if bTag := pickRt.GetBalancerTag(); len(bTag) > 0 {
+			isBalancerTag = true
+			finalTag = bTag
+		}
 	}
-	if s.c.expectTags[finalTag] {
+	if (!isBalancerTag && s.c.expectTags[finalTag]) ||
+		(isBalancerTag && s.c.expectBalancerTags[finalTag]) {
 		for _, r := range qualifiedIP {
 			finalIP = append(finalIP, r.Mask(defaultMask))
 		}
@@ -496,7 +516,7 @@ func (s *observer) procEvent(e observedEvent) {
 			})
 		}
 		needUpdateIPNets, metas := s.doObStatUpdate(ipNets, e)
-		s.addConnTrack(e, ipNets, metas, finalTag)
+		s.addConnTrack(e, ipNets, metas, finalTag, isBalancerTag)
 		if len(needUpdateIPNets) > 0 {
 			s.c.ospf.AnnounceASBRRoute(needUpdateIPNets)
 		}
@@ -507,7 +527,15 @@ var (
 	maskHost = net.CIDRMask(32, 32)
 )
 
-func (s *observer) addConnTrack(e observedEvent, dests []net.IPNet, metas []*obDestMeta, tag string) {
+func outName(isBalancerTag bool) string {
+	if isBalancerTag {
+		return "balancer"
+	}
+	return "outbound"
+}
+
+func (s *observer) addConnTrack(e observedEvent, dests []net.IPNet, metas []*obDestMeta,
+	tag string, isBalancerTag bool) {
 	newError(fmt.Sprintf("adding default dynamic dest ip rule in %s: %s",
 		dns_feature.DynamicIPSetDnsCircuitDestDefault, PrettyPrintIPNet(dests...))).
 		AtDebug().WriteToLog()
@@ -534,20 +562,21 @@ func (s *observer) addConnTrack(e observedEvent, dests []net.IPNet, metas []*obD
 			destM, exist := cMeta.destMeta[destK]
 			if !exist {
 				cMeta.destMeta[destK] = &connTrackDestMeta{
-					src:          connTrackKey(e.from),
-					g:            metas[i],
-					lastAccessed: time.Now(),
-					domain:       e.d,
-					outboundTag:  tag,
+					src:           connTrackKey(e.from),
+					g:             metas[i],
+					lastAccessed:  time.Now(),
+					domain:        e.d,
+					outboundTag:   tag,
+					isBalancerTag: isBalancerTag,
 				}
 				toAddDest = append(toAddDest, dest)
 			} else {
 				destM.updateLastAccessed(e.d)
-				if prevOutTag := destM.getOutTag(); prevOutTag != tag {
-					ospf.LogImportant("updating conn-track src %s ip rule from outbound:%s to outbound:%s domain: %s",
-						e.from.Address.String(), prevOutTag, tag, e.d)
+				if prevOutTag, prevIsBalancerTag := destM.getOutTag(); prevOutTag != tag {
+					ospf.LogImportant("updating conn-track src %s ip rule from %s:%s to %s:%s domain: %s",
+						e.from.Address.String(), outName(prevIsBalancerTag), prevOutTag, outName(isBalancerTag), tag, e.d)
 					s.dynDestRuleIP[dns_feature.DynamicIPSetDNSCircuitConnTrackDestPrefix+prevOutTag].RemoveIPNetConnTrack(e.from.Address.IP(), destK.ipNet())
-					destM.setOutTag(tag)
+					destM.setOutTag(tag, isBalancerTag)
 					toAddDest = append(toAddDest, dest)
 				}
 			}
@@ -562,11 +591,12 @@ func (s *observer) addConnTrack(e observedEvent, dests []net.IPNet, metas []*obD
 			}
 			destK := kFromIPAndMask(dest.IP, dest.Mask)
 			cMeta.destMeta[destK] = &connTrackDestMeta{
-				src:          connTrackKey(e.from),
-				g:            metas[i],
-				lastAccessed: time.Now(),
-				domain:       e.d,
-				outboundTag:  tag,
+				src:           connTrackKey(e.from),
+				g:             metas[i],
+				lastAccessed:  time.Now(),
+				domain:        e.d,
+				outboundTag:   tag,
+				isBalancerTag: isBalancerTag,
 			}
 			toAddDest = append(toAddDest, dest)
 		}
@@ -577,8 +607,8 @@ func (s *observer) addConnTrack(e observedEvent, dests []net.IPNet, metas []*obD
 	}
 
 	if len(toAddDest) > 0 {
-		ospf.LogImportant("adding conn-track ip rule for outbound:%s domain: %s : %s -> %s",
-			tag, e.d, e.from.Address.String(), PrettyPrintIPNet(toAddDest...))
+		ospf.LogImportant("adding conn-track ip rule for %s:%s domain: %s : %s -> %s",
+			outName(isBalancerTag), tag, e.d, e.from.Address.String(), PrettyPrintIPNet(toAddDest...))
 		s.dynSrcRuleIP[dns_feature.DynamicIPSetDNSCircuitConnTrackSrcPrefix+tag].AddIPNet(net.IPNet{
 			IP: e.from.Address.IP(), Mask: maskHost,
 		})
