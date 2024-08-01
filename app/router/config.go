@@ -19,6 +19,7 @@ import (
 
 type Rule struct {
 	Tag       string
+	BTag      string
 	Balancer  *Balancer
 	Condition Condition
 }

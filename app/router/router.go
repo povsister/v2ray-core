@@ -62,6 +62,7 @@ func (r *Router) Init(ctx context.Context, config *Config, d dns.Client, ohm out
 			if !found {
 				return newError("balancer ", btag, " not found")
 			}
+			rr.BTag = btag
 			rr.Balancer = brule
 		}
 		r.rules = append(r.rules, rr)
@@ -81,6 +82,21 @@ func (r *Router) PickRoute(ctx routing.Context) (routing.Route, error) {
 		return nil, err
 	}
 	return &Route{Context: ctx, outboundTag: tag}, nil
+}
+
+func (r *Router) PickRouteB(ctx routing.Context) (routing.RouteB, error) {
+	rule, ctx, err := r.pickRouteInternal(ctx)
+	if err != nil {
+		return nil, err
+	}
+	tag, err := rule.GetTag()
+	if err != nil {
+		return nil, err
+	}
+	return &RouteB{Route: &Route{
+		Context:     ctx,
+		outboundTag: tag,
+	}, balancerTag: rule.BTag}, nil
 }
 
 func (r *Router) pickRouteInternal(ctx routing.Context) (*Rule, routing.Context, error) {
@@ -138,6 +154,15 @@ func (r *Route) GetOutboundGroupTags() []string {
 // GetOutboundTag implements routing.Route.
 func (r *Route) GetOutboundTag() string {
 	return r.outboundTag
+}
+
+type RouteB struct {
+	*Route
+	balancerTag string
+}
+
+func (r *RouteB) GetBalancerTag() string {
+	return r.balancerTag
 }
 
 func init() {
