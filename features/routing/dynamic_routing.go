@@ -5,7 +5,7 @@ import (
 )
 
 type RouterWithDynamicRule interface {
-	Router
+	RouterB
 	// GetDynamicRuleIP returns a dynamic routing rule based on IPNet.
 	// currently, only "dynamic-ipset:XXXX" is supported.
 	// Be noted that rules with same name are Singleton.
