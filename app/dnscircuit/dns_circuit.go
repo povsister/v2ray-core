@@ -15,8 +15,9 @@ import (
 )
 
 type dnsCircuit struct {
-	dynRouter  routing.RouterWithDynamicRule
-	expectTags map[string]bool
+	dynRouter          routing.RouterWithDynamicRule
+	expectTags         map[string]bool
+	expectBalancerTags map[string]bool
 
 	inboundTags []string
 	ihm         inbound.Manager
@@ -45,6 +46,10 @@ func (s *dnsCircuit) Init(ctx context.Context, c *Config, router routing.Router,
 	s.expectTags = make(map[string]bool, len(c.OutboundTags))
 	for _, tag := range c.OutboundTags {
 		s.expectTags[tag] = true
+	}
+	s.expectBalancerTags = make(map[string]bool, len(c.BalancerTags))
+	for _, tag := range c.BalancerTags {
+		s.expectBalancerTags[tag] = true
 	}
 	// confirm router capable
 	dynRouter, ok := router.(routing.RouterWithDynamicRule)
