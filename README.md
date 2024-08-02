@@ -170,7 +170,7 @@ please submit it to [upstream project](https://github.com/v2fly/v2ray-core).
 
 **核心诉求只有两点：**
 
-* 主路由与旁路由最好和LAN设备隔离出一个网段（实在不行，同一个网段也行）
+* 主路由与旁路由需要和LAN设备隔离出一个网段，且这个网段只有主路由和旁路由两个设备，这个是必须要求。
 * 主路由与旁路由IP固定
 
 ![Network topology](/images/topology.png)
@@ -241,10 +241,16 @@ V2ray的默认配置文件路径为 `/usr/local/etc/v2ray/config.json`
     "inboundTags": [
       "transparent"
     ],
-    //（必填）用于conn-track的outbound，同时，DNS路由结果命中此outboundTag的流量都会被转发至旁路由。
+    //（outboundTags和balancerTags不能同时为空）
+    // 用于conn-track的outbound，同时，DNS路由结果命中此outboundTag的流量都会被转发至旁路由。
     // 填写代理服务器的outboundTag即可
     "outboundTags": [
       "proxy"
+    ],
+    //（outboundTags和balancerTags不能同时为空）
+    // 用于conn-track的balancer，同时，DNS路由结果命中此balancerTag的流量都会被转发至旁路由。
+    "balancerTags": [
+      "jp-balancer"
     ],
     //（可选）固定通告某些IP段，目标IP在此范围内的流量都会被转发至旁路由。
     "persistentRoute": [
@@ -740,6 +746,8 @@ health-check.side.local  192.168.87.2
 以下是一个完整的V2Ray配置示例，包含了大陆域名白名单的DNS分流+尝试使用大陆DNS解析未知域名+海外DNS兜底+GFW黑名单路由模式+特殊域名走不同代理出口。
 请根据自己需求酌情修改。
 
+2024/08/02: 添加了负载均衡的配置示例，用于简化使用负载均衡作为出口时，conn-track规则书写繁琐的问题。提高配置可维护性。
+
 ```json5
 {
   "log": {
@@ -755,11 +763,18 @@ health-check.side.local  192.168.87.2
     "inboundTags": [
       "transparent"
     ],
-    //（必填）用于conn-track的outbound，同时，DNS路由结果命中此outboundTag的流量都会被转发至旁路由。
-    // 填写代理服务器的outboundTag即可，需要和下面outbound配置里的tag匹配。
+    //（outboundTags和balancerTags不能同时为空）
+    // 用于conn-track的outbound，同时，DNS路由决策结果命中这些outboundTag的流量都会被转发至旁路由。
+    // 填写代理服务器的outboundTag即可
     "outboundTags": [
       "proxy-default",
       "proxy-jp"
+    ],
+    //（outboundTags和balancerTags不能同时为空）
+    // 用于conn-track的balancer，同时，DNS路由决策结果命中这些balancerTag的流量都会被转发至旁路由。
+    // 填写出口的balancerTag即可
+    "balancerTags": [
+      "usa-balancer"
     ],
     //（可选）固定通告某些IP段，目标IP在此范围内的流量都会被转发至旁路由。
     "persistentRoute": [
@@ -895,9 +910,61 @@ health-check.side.local  192.168.87.2
           "mark": 255
         }
       }
-    }
+    },
     // 如果你有多个代理出口分流/负载均衡的需求，
     // 可以在这里继续添加outbounds
+    {
+      // USA代理出口-1，用于部分域名按需分流出口。
+      // 这里是vmess示例，需要填写你自己的代理服务和对应协议
+      "tag": "proxy-usa-01",
+      "protocol": "vmess",
+      "settings": {
+        "vnext": [
+          {
+            "address": "your.proxy.server.to.usa.01",
+            "port": 65535,
+            "users": [
+              {
+                "id": "************************",
+                "security": "auto"
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "sockopt": {
+          // sock mark不能删，必须和透明代理配置相对应
+          "mark": 255
+        }
+      }
+    },
+    {
+      // USA代理出口-2，用于部分域名按需分流出口。
+      // 这里是vmess示例，需要填写你自己的代理服务和对应协议
+      "tag": "proxy-usa-02",
+      "protocol": "vmess",
+      "settings": {
+        "vnext": [
+          {
+            "address": "your.proxy.server.to.usa.02",
+            "port": 65535,
+            "users": [
+              {
+                "id": "************************",
+                "security": "auto"
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "sockopt": {
+          // sock mark不能删，必须和透明代理配置相对应
+          "mark": 255
+        }
+      }
+    }
   ],
   // DNS规则，使用了国内外DNS分流+大陆DNS优先+海外DNS兜底的配置
   "dns": {
@@ -952,6 +1019,18 @@ health-check.side.local  192.168.87.2
           "regexp:.*\\.jp$"
         ],
         "tag": "dns-jp-site"
+      },
+      {
+        // Twitter / Netflix 等特殊网站DNS规则。
+        // 用于分流DNS流量，后续routing模块走特殊出口
+        "address": "1.1.1.1",
+        "port": 53,
+        "domains": [
+          "geosite:twitter",
+          "geosite:facebook",
+          "geosite:netflix"
+        ],
+        "tag": "dns-usa-site"
       },
       {
         // 特殊域名规则，例如：
@@ -1020,12 +1099,57 @@ health-check.side.local  192.168.87.2
       }
     ]
   },
+  // 定义多个连接观测器，用于给负载均衡器提供连接观测数据
+  "multiObservatory": {
+    "observers": [
+      {
+        // 用default或者填空，另一个burst看了下代码好像没写完
+        "type": "default",
+        // 定义此连接观测器的tag
+        "tag": "internet-usa-observatory",
+        "settings": {
+          "subjectSelector": [
+            // 观测所有proxy-usa开头的outbound
+            "proxy-usa"
+          ],
+          // 采用赛博大善人cloudflare的status api来测试outbound的网络连接情况
+          "probeURL": "https://www.cloudflarestatus.com/api/v2/status.json",
+          // 每隔多少秒进行一次网络情况测试，不建议设太低，容易浪费流量
+          "probeInterval": "60s"
+        }
+      }
+      // 可以继续添加匹配不同出口的连接观测器，用于给多个负载均衡器提供连接观测数据
+    ]
+  },
   // 此处路由示例路由配置为GFW黑名单+自定义黑名单模式，
   // 不匹配黑名单的域名会默认直连。
   "routing": {
     // 建议使用此域名规则
     "domainStrategy": "IPIfNonMatch",
     "domainMatcher": "mph",
+    "balancers": [
+      {
+        // USA 出口负载均衡，匹配proxy-usa开头的outbound
+        "tag": "usa-balancer",
+        "selector": [
+          "proxy-usa"
+        ],
+        "strategy": {
+          // 可用类型 建议在leastping和random类型中选择，leastload看了下实现好像没做好
+          "type": "leastping",
+          "settings": {
+            // 这里单独定义此负载均衡器，使用上面定义的独立连接观测器。
+            // 如果你有多个不同区域的负载均衡，建议为每个负载均衡都使用独立的连接观测器。
+            "observerTag": "internet-usa-observatory",
+            // 仅random类型的负载均衡有效，leastping会自动检测节点存活情况
+            "aliveOnly": true
+          }
+        },
+        // 当负载均衡所有节点均不可用时，降级为直连
+        "fallbackTag": "direct"
+      }
+      // 可以继续添加更多的负载均衡出口，但请记得为每个负载均衡器配置好合适连接观测器和strategy
+    ],
     "rules": [
       {
         // 直连 123 端口 UDP 流量（NTP 协议）
@@ -1071,6 +1195,14 @@ health-check.side.local  192.168.87.2
           "dns-jp-site"
         ],
         "outboundTag": "proxy-jp"
+      },
+      {
+        // 特殊规则，USA网站的DNS流量，走USA负载均衡出口
+        "type": "field",
+        "inboundTag": [
+          "dns-usa-site"
+        ],
+        "balancerTag": "usa-balancer"
       },
       {
         // 海外默认DNS产生的流量 走默认代理出口
@@ -1140,6 +1272,30 @@ health-check.side.local  192.168.87.2
         "source": "dynamic-ipset:dnscircuit-conntrack-src-proxy-jp",
         "ip": "dynamic-ipset:dnscircuit-conntrack-dest-proxy-jp",
         "outboundTag": "proxy-jp"
+      },
+      {
+        // USA Twitter Netflix等网站，走USA负载均衡
+        "type": "field",
+        "domain": [
+          "geosite:twitter",
+          "geosite:facebook",
+          "geosite:netflix"
+        ],
+        // 注意这里使用了负载均衡作为出口
+        "balancerTag": "usa-balancer",
+      },
+      {
+        //（重要，必填）
+        // 注意顺序，建议紧跟在域名路由规则之后。
+        // DNS Route 动态维护的 conn-track 规则，实际使用的是V2Ray router的 srcIP - dstIP 匹配规则。
+        // 格式为: 
+        // from: dynamic-ipset:dnscircuit-conntrack-src-{balancerTag}
+        // to: dynamic-ipset:dnscircuit-conntrack-dest-{balancerTag}
+        "type": "field",
+        "source": "dynamic-ipset:dnscircuit-conntrack-src-usa-balancer",
+        "ip": "dynamic-ipset:dnscircuit-conntrack-dest-usa-balancer",
+        // 注意这里使用了负载均衡作为出口
+        "balancerTag": "usa-balancer"
       },
       {
         // 被墙的域名和典型的非大陆域名，走默认代理
