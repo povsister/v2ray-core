@@ -361,7 +361,7 @@ func (s *observer) doObStatGC() {
 				continue
 			}
 			ospf.LogImportant("revoking conn-track ip rule for %s:%s due to %s inactive: %s -> %s",
-				outName(tag.isBalancer), tag, s.c.inactiveClean.String(), clientAddr.String(), PrettyPrintIPNet(ips...))
+				outName(tag.isBalancer), tag.tag, s.c.inactiveClean.String(), clientAddr.String(), PrettyPrintIPNet(ips...))
 			s.dynDestRuleIP[dns_feature.DynamicIPSetDNSCircuitConnTrackDestPrefix+tag.tag].RemoveIPNetConnTrack(clientAddr.AsSlice(), ips...)
 		}
 		clear(revokeDestTracks)
