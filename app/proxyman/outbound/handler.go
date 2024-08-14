@@ -93,8 +93,8 @@ func (h *Handler) getOutboundCtxAwareStatLink(ctx context.Context, link *transpo
 		name := "outbound>>>" + h.tag + ">>>traffic>>>uplink>>>src>>>" + srcAddr
 		c, _ := stats.GetOrRegisterCounter(h.stats, name)
 		if c != nil {
-			ret.Writer = &StatsWriter{
-				Writer:  link.Writer,
+			ret.Reader = &StatsReader{
+				Reader:  link.Reader,
 				counter: c,
 			}
 		}
@@ -103,8 +103,8 @@ func (h *Handler) getOutboundCtxAwareStatLink(ctx context.Context, link *transpo
 		name := "outbound>>>" + h.tag + ">>>traffic>>>downlink>>>src>>>" + srcAddr
 		c, _ := stats.GetOrRegisterCounter(h.stats, name)
 		if c != nil {
-			ret.Reader = &StatsReader{
-				Reader:  link.Reader,
+			ret.Writer = &StatsWriter{
+				Writer:  link.Writer,
 				counter: c,
 			}
 		}
