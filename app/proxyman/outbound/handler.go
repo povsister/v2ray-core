@@ -6,6 +6,7 @@ import (
 	core "github.com/v2fly/v2ray-core/v5"
 	"github.com/v2fly/v2ray-core/v5/app/proxyman"
 	"github.com/v2fly/v2ray-core/v5/common"
+	"github.com/v2fly/v2ray-core/v5/common/buf"
 	"github.com/v2fly/v2ray-core/v5/common/dice"
 	"github.com/v2fly/v2ray-core/v5/common/environment"
 	"github.com/v2fly/v2ray-core/v5/common/environment/envctx"
@@ -50,6 +51,78 @@ func getStatCounter(v *core.Instance, tag string) (stats.Counter, stats.Counter)
 	return uplinkCounter, downlinkCounter
 }
 
+type StatsWriter struct {
+	buf.Writer
+	counter stats.Counter
+}
+
+func (w *StatsWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
+	if mb != nil && !mb.IsEmpty() {
+		w.counter.Add(int64(mb.Len()))
+	}
+	return w.Writer.WriteMultiBuffer(mb)
+}
+
+type StatsReader struct {
+	buf.Reader
+	counter stats.Counter
+}
+
+func (r *StatsReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
+	mb, err := r.Reader.ReadMultiBuffer()
+	if mb != nil && !mb.IsEmpty() {
+		r.counter.Add(int64(mb.Len()))
+	}
+	return mb, err
+}
+
+func (h *Handler) getOutboundCtxAwareStatLink(ctx context.Context, link *transport.Link) (ret *transport.Link) {
+	inb := session.InboundFromContext(ctx)
+	if inb == nil || inb.Source.Address == nil {
+		return link
+	}
+	ret = &transport.Link{
+		Reader: link.Reader,
+		Writer: link.Writer,
+	}
+	var (
+		srcAddr = inb.Source.Address.String()
+	)
+
+	if len(h.tag) > 0 && h.policy.ForSystem().Stats.OutboundUplink && len(srcAddr) > 0 {
+		name := "outbound>>>" + h.tag + ">>>traffic>>>uplink>>>src>>>" + srcAddr
+		c, _ := stats.GetOrRegisterCounter(h.stats, name)
+		if c != nil {
+			ret.Writer = &StatsWriter{
+				Writer:  link.Writer,
+				counter: c,
+			}
+		}
+	}
+	if len(h.tag) > 0 && h.policy.ForSystem().Stats.OutboundDownlink && len(srcAddr) > 0 {
+		name := "outbound>>>" + h.tag + ">>>traffic>>>downlink>>>src>>>" + srcAddr
+		c, _ := stats.GetOrRegisterCounter(h.stats, name)
+		if c != nil {
+			ret.Reader = &StatsReader{
+				Reader:  link.Reader,
+				counter: c,
+			}
+		}
+	}
+
+	// for connect attempts
+	if len(h.tag) > 0 && (h.policy.ForSystem().Stats.OutboundUplink || h.policy.ForSystem().Stats.OutboundDownlink) &&
+		len(srcAddr) > 0 {
+		name := "outbound>>>" + h.tag + ">>>connection>>>attempt>>>src>>>" + srcAddr
+		c, _ := stats.GetOrRegisterCounter(h.stats, name)
+		if c != nil {
+			c.Add(1)
+		}
+	}
+
+	return
+}
+
 // Handler is an implements of outbound.Handler.
 type Handler struct {
 	ctx             context.Context
@@ -57,6 +130,8 @@ type Handler struct {
 	senderSettings  *proxyman.SenderConfig
 	streamSettings  *internet.MemoryStreamConfig
 	proxy           proxy.Outbound
+	policy          policy.Manager
+	stats           stats.Manager
 	outboundManager outbound.Manager
 	mux             *mux.ClientManager
 	uplinkCounter   stats.Counter
@@ -71,6 +146,8 @@ func NewHandler(ctx context.Context, config *core.OutboundHandlerConfig) (outbou
 	h := &Handler{
 		ctx:             ctx,
 		tag:             config.Tag,
+		policy:          v.GetFeature(policy.ManagerType()).(policy.Manager),
+		stats:           v.GetFeature(stats.ManagerType()).(stats.Manager),
 		outboundManager: v.GetFeature(outbound.ManagerType()).(outbound.Manager),
 		uplinkCounter:   uplinkCounter,
 		downlinkCounter: downlinkCounter,
@@ -164,14 +241,14 @@ func (h *Handler) Dispatch(ctx context.Context, link *transport.Link) {
 		}
 	}
 	if h.mux != nil && (h.mux.Enabled || session.MuxPreferedFromContext(ctx)) {
-		if err := h.mux.Dispatch(ctx, link); err != nil {
+		if err := h.mux.Dispatch(ctx, h.getOutboundCtxAwareStatLink(ctx, link)); err != nil {
 			err := newError("failed to process mux outbound traffic").Base(err)
 			session.SubmitOutboundErrorToOriginator(ctx, err)
 			err.WriteToLog(session.ExportIDToError(ctx))
 			common.Interrupt(link.Writer)
 		}
 	} else {
-		if err := h.proxy.Process(ctx, link, h); err != nil {
+		if err := h.proxy.Process(ctx, h.getOutboundCtxAwareStatLink(ctx, link), h); err != nil {
 			// Ensure outbound ray is properly closed.
 			err := newError("failed to process outbound traffic").Base(err)
 			session.SubmitOutboundErrorToOriginator(ctx, err)
