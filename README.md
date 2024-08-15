@@ -681,6 +681,11 @@ root@debian:~# systemctl status tproxy
 /ip firewall nat add chain=dstnat protocol=udp dst-port=53 src-address=!192.168.87.2 action=dst-nat to-addresses=192.168.87.2 to-ports=53 comment="DnsForward"
 ```
 
+**⚠️ 注意，如果你的ROS具有公网地址，则该DNAT配置会导致WAN口UDP53公网可访问，且会响应DNS查询请求。**
+
+这会导致V2Ray的DnsRoute里出现比较奇怪的来源IP记录。要禁止接受WAN口DNS请求，
+需要在Firewall - Filter - Forward chain，添加 DST UDP53 且in-interface-list WAN action DROP的规则即可。不再赘述。
+
 ![Firewall NAT Rule for DnsForward](/images/firewall-dnsForward.png)
 
 ### 配置探活和探活失败时自动回切DNS的脚本
