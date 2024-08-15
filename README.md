@@ -49,7 +49,9 @@ please submit it to [upstream project](https://github.com/v2fly/v2ray-core).
     * [配置DNS转发旁路由](#配置dns转发旁路由)
     * [配置探活和探活失败时自动回切DNS的脚本](#配置探活和探活失败时自动回切dns的脚本)
 * [V2Ray配置示例](#v2ray配置示例)
-  * [GFW黑名单+自定义黑名单配置示例](#gfw黑名单自定义黑名单配置示例)
+    * [更新记录](#更新记录)
+    * [V2Ray监控预览](#v2ray监控预览)
+    * [GFW黑名单+自定义黑名单配置示例](#gfw黑名单自定义黑名单配置示例)
 * [FAQs](#faqs)
   * [OSPF 收敛速度快吗？](#ospf-收敛速度快吗)
   * [这个修改版的V2Ray为什么关闭有点慢](#这个修改版的v2ray为什么关闭有点慢)
@@ -746,12 +748,20 @@ health-check.side.local  192.168.87.2
 
 **⚠️ 目前本项目只支持V2Ray JSON v4的配置格式，其他格式暂不支持**
 
-## GFW黑名单+自定义黑名单配置示例
+### 更新记录
+
+* 2024/08/02: 添加了负载均衡的配置示例，用于简化使用负载均衡作为出口时，conn-track规则书写繁琐的问题。提高配置可维护性。
+* 2024/08/15: 添加了statsServer配置，可配合个人修改版的[v2ray-exporter](https://github.com/povsister/v2ray-exporter)/prometheus/grafana观测V2Ray出口及客户端实时流量或趋势。
+
+### V2Ray监控预览
+![V2Ray Dashboard](/images/v2ray-dashboard.png)
+
+![V2Ray Dashboard p2](/images/v2ray-dashboard-p2.png)
+
+### GFW黑名单+自定义黑名单配置示例
 
 以下是一个完整的V2Ray配置示例，包含了大陆域名白名单的DNS分流+尝试使用大陆DNS解析未知域名+海外DNS兜底+GFW黑名单路由模式+特殊域名走不同代理出口。
 请根据自己需求酌情修改。
-
-2024/08/02: 添加了负载均衡的配置示例，用于简化使用负载均衡作为出口时，conn-track规则书写繁琐的问题。提高配置可维护性。
 
 ```json5
 {
@@ -799,6 +809,16 @@ health-check.side.local  192.168.87.2
     }
   },
   "inbounds": [
+    {
+      // 流量监测用，如果你不需要，删了它
+      "tag": "api",
+      "listen": "127.0.0.1",
+      "port": 11451,
+      "protocol": "dokodemo-door",
+      "settings": {
+        "address": "127.0.0.1"
+      }
+    },
     {
       //（必填）用作代理软件健康检查
       "tag": "health-check",
@@ -1126,6 +1146,28 @@ health-check.side.local  192.168.87.2
       // 可以继续添加匹配不同出口的连接观测器，用于给多个负载均衡器提供连接观测数据
     ]
   },
+  // api配置，用于统计流量
+  // 如果你不需要，删了它
+  "api": {
+    "tag": "api",
+    "services": [
+      "StatsService"
+    ]
+  },
+  // 别问我为啥要配个空配置，代码里这么要求的。
+  // 如果你不需要，删了它
+  "stats": {
+    // I don't know why this empty config is needed.
+    // but without it, the stat server doesn't even boot up.
+  },
+  // policy开启system outboundlink的上下行统计
+  // 如果你不需要，删了它
+  "policy": {
+    "system": {
+      "statsOutboundUplink": true,
+      "statsOutboundDownlink": true
+    }
+  },
   // 此处路由示例路由配置为GFW黑名单+自定义黑名单模式，
   // 不匹配黑名单的域名会默认直连。
   "routing": {
@@ -1156,6 +1198,14 @@ health-check.side.local  192.168.87.2
       // 可以继续添加更多的负载均衡出口，但请记得为每个负载均衡器配置好合适连接观测器和strategy
     ],
     "rules": [
+      {
+        // 流量观测用，如果你不需要，删了它
+        "type": "field",
+        "inboundTag": [
+          "api"
+        ],
+        "outboundTag": "api"
+      },
       {
         // 直连 123 端口 UDP 流量（NTP 协议）
         "type": "field",
