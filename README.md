@@ -472,9 +472,14 @@ V2ray的默认配置文件路径为 `/usr/local/etc/v2ray/config.json`
 # 开启内核IPv4包转发
 sysctl -w net.ipv4.ip_forward=1
 
-# 在POSTROUTING上添加一个名为v2ray的链
+# 添加一个名为v2ray的table
+# 如果你在配置透明代理时已经添加过这个table
+# 则这个命令不出意外会执行失败，也可以直接跳过
+nft add table v2ray
+
+# 在table v2ray的POSTROUTING链上挂一个nat hook
 nft add chain v2ray postrouting { type nat hook postrouting priority 0 \; }
-# 向v2ray链中添加一条规则，从 ${IFNAME} 网卡发出的流量全部进行masquerade
+# 向v2ray POSTROUTING链中添加一条规则，从 ${IFNAME} 网卡发出的流量全部进行masquerade
 nft add rule v2ray postrouting oif ${IFNAME} masquerade
 ```
 
