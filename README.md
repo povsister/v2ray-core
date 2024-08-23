@@ -45,9 +45,13 @@ please submit it to [upstream project](https://github.com/v2fly/v2ray-core).
       * [将nftables的配置持久化](#将nftables的配置持久化)
   * [0x3: 主路由（ROS）配置](#0x3-主路由ros配置)
     * [开启OSPF动态路由协议](#开启ospf动态路由协议)
+      * [ROSv6系统配置OSPF](#rosv6系统配置ospf)
+      * [ROSv7系统配置OSPF](#rosv7系统配置ospf)
     * [配置策略路由以避免路由环路](#配置策略路由以避免路由环路)
     * [配置DNS转发旁路由](#配置dns转发旁路由)
     * [配置探活和探活失败时自动回切DNS的脚本](#配置探活和探活失败时自动回切dns的脚本)
+      * [ROSv6旁路由探活脚本](#rosv6旁路由探活脚本)
+      * [ROSv7旁路由探活设置](#rosv7旁路由探活设置)
 * [V2Ray配置示例](#v2ray配置示例)
     * [更新记录](#更新记录)
     * [V2Ray监控预览](#v2ray监控预览)
@@ -622,7 +626,11 @@ root@debian:~# systemctl status tproxy
 
 ### 开启OSPF动态路由协议
 
-进入 `Routing -> OSPF` 菜单，如果是v7的ROS系统，记得选OSPFv2，本项目目前只支持IPv4
+由于v6和v7的OSPF配置差别过大，下面会同时给出两种系统的配置示例。只支持OSPFv2，即IPv4协议。
+
+#### ROSv6系统配置OSPF
+
+进入 `Routing -> OSPF` 菜单，如果是v7的ROS系统，参考下面选OSPFv2，本项目目前只支持IPv4
 
 进入 `Interfaces`，选择和旁路由直接相连的接口，我这里旁路由和主路由接口都属于一个网桥，所以直接选网桥即可，如果你没用网桥，那就选接口。
 验证选None，不开启验证，优先级填1，其他默认即可，务必保证`HelloInterval=10` 且 `RouterDeadInterval=40`，否则会影响邻接。
@@ -636,6 +644,22 @@ root@debian:~# systemctl status tproxy
 ![ospf networks](/images/ospf-networks.png)
 
 至此完成OSPF配置，等待40秒后，你的主路由 `Interface - State` 应该和上图一样，展示为 Designated Router（即DR）状态。
+
+#### ROSv7系统配置OSPF
+
+进入 `Routing -> OSPF` 菜单，先进入`Instances`，新建一个OSPFv2的实例，注意下图的红框内容。
+
+RouterId填写你主路由和旁路由通信的IP地址即可，图中仅供参考不要照抄。
+![rosv7 ospf instances](/images/rosv7-ospf-instance.png)
+
+进入 `Areas`，填写backbone区域，instance选择上一步创建的instance，`Area ID`和其他内容照图填写。
+![rosv7 ospf area](/images/rosv7-ospf-area.png)
+
+进入 `Interface Templates`，选择和旁路由相连的接口名称，选择刚刚创建的area，Networks填写你规划的主路由和旁路由的网段。
+其余配置照图填写
+![rosv7 ospf interface](/images/rosv7-ospf-interface.png)
+
+至此完成OSPF配置，等待40秒后，你的主路由 `Interfaces`中，应该会出现一个state为DR（Designated Router）动态条目。代表OSPF配置成功。
 
 ### 配置策略路由以避免路由环路
 
@@ -652,6 +676,10 @@ root@debian:~# systemctl status tproxy
 * **主路由创建一个新的路由表**，记为`side-anti-loop`，此路由表中需要填写默认路由为WAN口，以及本地LAN IP段所属的网桥或接口。
 
   注意红框中的内容，如果你本地有其他网段，需要一并以静态路由形式填入，注意选择所属接口。这块照图自己写吧，就不给命令了。
+
+  ⚠️：如果使用ROSv7系统，需要到`Routing -> Tables`新建路由表，才能在`IP -> Routes`中使用，注意新建的路由表也要勾选FIB。
+
+  新建的路由表中，其所有条目状态（最前面的字母），应该为`AS`，即 `active & static`，如果状态不对请自行排查。
   ![New RoutingTable: side-anti-loop](/images/side-rtable.png)
 
 
@@ -706,6 +734,8 @@ root@debian:~# systemctl status tproxy
 
 **以下内容仅适用于ROSv6的系统，v7的系统可以直接使用`Tools -> Netwatch`，直接配置旁路由IP+探活端口，HTTP方式探活即可。**
 
+#### ROSv6旁路由探活脚本
+
 在ROS的 `System -> Scripts` 菜单中，创建一个名为 `probeSide` 的脚本，内容填写下面的代码。
 注意端口号要和V2Ray配置中的探活端口号一致。
 
@@ -744,6 +774,30 @@ health-check.side.local  192.168.87.2
 
 配置完成后如下
 ![scheduler for side health check](/images/side-healthcheck.png)
+
+#### ROSv7旁路由探活设置
+
+ROSv7可直接使用`Tools - Netwatch`新建探活任务，照下图设置即可，注意host和port填写旁路由的IP地址和探活端口。
+
+然后，别忘了在`UP`和`DOWN`事件的脚本里填写如下内容
+
+**On Up**
+```shell
+/log info "Side-Router health probe OK - Turn ON DNS Forward";
+/ip firewall nat enable [/ip firewall nat find where comment="DnsForward"];
+/ip dns set allow-remote-requests=no;
+```
+
+**On Down**
+```shell
+/log info "Side-Router health probe FAILED - Turn OFF DNS Forward";
+/ip firewall nat disable [/ip firewall nat find where comment="DnsForward"];
+/ip dns set allow-remote-requests=yes;
+```
+
+![rosv7 netwatch](/images/rosv7-netwatch.png)
+
+
 
 至此，你已经完成了主路由和旁路由的拓扑配置，下一步，是时候完成V2Ray的完整配置了。
 
