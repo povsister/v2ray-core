@@ -75,21 +75,6 @@ func (s *HealthServer) Process(ctx context.Context, net net.Network, conn intern
 }
 
 func (s *HealthServer) handleHttp(ctx context.Context, request *http.Request, writer io.Writer, dispatcher routing.Dispatcher) error {
-	if request.URL.Path != "/health" {
-		response := &http.Response{
-			Status:        "Not Found",
-			StatusCode:    404,
-			Proto:         "HTTP/1.1",
-			ProtoMajor:    1,
-			ProtoMinor:    1,
-			Header:        http.Header(make(map[string][]string)),
-			Body:          nil,
-			ContentLength: 0,
-			Close:         true,
-		}
-		response.Header.Set("Connection", "close")
-		return response.Write(writer)
-	}
 	response := &http.Response{
 		Status:        "OK",
 		StatusCode:    200,
