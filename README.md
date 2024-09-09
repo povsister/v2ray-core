@@ -203,6 +203,7 @@ linux系统上推荐使用 [fhs-install-v2ray](https://github.com/v2fly/fhs-inst
 * 只支持TPORXY模式的透明代理，请勿配置成REDIRECT模式。
 * 需要拦截UDP53的DNS查询请求，并转交给V2Ray内置DNS处理
 * 强烈推荐替换V2Ray的默认geoip/geosite规则文件为社区增强版本的 [Loyalsoldier/v2ray-rules-dat](https://github.com/Loyalsoldier/v2ray-rules-dat)
+
   V2Ray的默认dat文件路径为`/usr/local/share/v2ray`，下载对应dat文件直接替换即可。
 * 需要参考本节末尾，**额外赋予 V2Ray `NET_RAW` 权限**，否则无法正常收发OSPF数据包
 
