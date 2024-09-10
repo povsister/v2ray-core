@@ -241,7 +241,7 @@ func (n *Neighbor) transState(target NeighborState) {
 			n.lastReceivedDDInvalidTimer.Stop()
 		}
 	}
-	LogImportant("neighbor %v state change: %v -> %v", n.NeighborId, currState, target)
+	LogImportant("neighbor %s state change: %v -> %v", uint32ToIPv4(n.NeighborId).String(), currState, target)
 	n.State = target
 }
 
