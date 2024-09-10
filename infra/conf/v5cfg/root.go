@@ -58,6 +58,14 @@ func (c RootConfig) BuildV5(ctx context.Context) (proto.Message, error) {
 		config.App = append(config.App, serial.ToTypedMessage(dnsApp))
 	}
 
+	if c.DNSCircuit != nil {
+		dnsCircuitApp, err := loadHeterogeneousConfigFromRawJSON("service", "dnscircuit", c.DNSCircuit)
+		if err != nil {
+			return nil, newError("failed to parse DNS circuit config").Base(err)
+		}
+		config.App = append(config.App, serial.ToTypedMessage(dnsCircuitApp))
+	}
+
 	for _, rawInboundConfig := range c.Inbounds {
 		ic, err := rawInboundConfig.BuildV5(ctx)
 		if err != nil {
