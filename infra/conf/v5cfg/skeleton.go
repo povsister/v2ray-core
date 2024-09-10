@@ -13,6 +13,7 @@ import (
 type RootConfig struct {
 	LogConfig    json.RawMessage            `json:"log"`
 	DNSConfig    json.RawMessage            `json:"dns"`
+	DNSCircuit   json.RawMessage            `json:"dnsCircuit"`
 	RouterConfig json.RawMessage            `json:"router"`
 	Inbounds     []InboundConfig            `json:"inbounds"`
 	Outbounds    []OutboundConfig           `json:"outbounds"`
