@@ -3,6 +3,7 @@ package ospf
 import (
 	"context"
 	"encoding/binary"
+	"net"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -12,6 +13,10 @@ import (
 
 func ipv4BytesToUint32(b []byte) uint32 {
 	return binary.BigEndian.Uint32(b[0:4])
+}
+
+func uint32ToIPv4(ip uint32) net.IP {
+	return net.IPv4(byte(ip>>24), byte(ip>>16), byte(ip>>8), byte(ip))
 }
 
 func ipv4MaskToUint32(b []byte) uint32 {
