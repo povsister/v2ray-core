@@ -807,12 +807,13 @@ ROSv7可直接使用`Tools - Netwatch`新建探活任务，照下图设置即可
 理论上，本方案中V2Ray可按喜好配置GFW黑名单，或者大陆白名单代理模式。
 但由于其运行在网关上，如果你不想梯子账单爆炸，一般还是建议使用GFW黑名单+自定义黑名单模式。
 
-**⚠️ 目前本项目只支持V2Ray JSON v4的配置格式，其他格式暂不支持**
+**⚠️ 目前本项目只支持V2Ray JSON v4的配置格式，其他格式不保证可用**
 
 ### 更新记录
 
 * 2024/08/02: 添加了负载均衡的配置示例，用于简化使用负载均衡作为出口时，conn-track规则书写繁琐的问题。提高配置可维护性。
 * 2024/08/15: 添加了statsServer配置，可配合个人修改版的[v2ray-exporter](https://github.com/povsister/v2ray-exporter)/prometheus/grafana观测V2Ray出口及客户端实时流量或趋势。
+* 2024/09/10: 添加v5cfg的配置支持，但未做测试，不保证完全可用，暂不提供配置指导。
 
 ### V2Ray监控预览
 ![V2Ray Dashboard](/images/v2ray-dashboard.png)
