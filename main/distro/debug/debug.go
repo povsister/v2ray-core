@@ -1,11 +1,3 @@
 package debug
 
-import (
-	"net/http"
-)
-
-func init() {
-	go func() {
-		http.ListenAndServe(":6060", nil)
-	}()
-}
+import _ "github.com/v2fly/v2ray-core/v5/main/plugins/plugin_pprof"
