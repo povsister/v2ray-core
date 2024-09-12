@@ -59,7 +59,7 @@ please submit it to [upstream project](https://github.com/v2fly/v2ray-core).
 * [FAQs](#faqs)
   * [OSPF 收敛速度快吗？](#ospf-收敛速度快吗)
   * [这个修改版的V2Ray为什么关闭有点慢](#这个修改版的v2ray为什么关闭有点慢)
-* [Stargazers over time](#stargazers-over-time-)
+* [Stargazers over time](#stargazers-over-time)
 <!-- TOC -->
 
 # Related Links
@@ -158,14 +158,16 @@ please submit it to [upstream project](https://github.com/v2fly/v2ray-core).
 
 ## 硬件要求
 
-* 支持OSPFv2动态路由协议的主路由，且主路由需要支持策略路由（某些文章可能称为标记路由）。
-* 一台可运行V2Ray的Debian Linux作为旁路由
+* 一台支持OSPFv2动态路由协议的主路由，且主路由需要支持策略路由（某些文章可能称为标记路由）。
+* 一台可运行V2Ray的Debian Linux作为单臂旁路由
 
 **以下的使用说明中，采用的硬件配置为**
 
-主路由：MikroTik hAPac2 RBD52G-5HacD2HnD (RouterOS v6.49.14)
+主路由（ROSv6）：MikroTik hAPac2 RBD52G-5HacD2HnD (RouterOS v6.49.14)
 
-旁路由：Debian 11 Linux with 2-core 2GiB RAM (ESXi 7.0 on J4125)
+主路由（ROSv7）：MikroTik RB5009UG+S+IN (RouterOS v7.15.0)
+
+旁路由：Debian 12 Linux with 2-core 2GiB RAM (LXC PVE v8.2.4 on N100)
 
 推荐主路由使用ROS，旁路由使用Debian11及以上的linux系统，至少分配1c1g的资源。
 
@@ -199,9 +201,9 @@ linux系统上推荐使用 [fhs-install-v2ray](https://github.com/v2fly/fhs-inst
 里的修改版，替换v2ray可执行文件即可，v2ray的默认安装路径为 `/usr/local/bin/v2ray`
 
 [透明代理的配置教程](https://guide.v2fly.org/app/tproxy.html)
-已经很多，我就不再赘述了，核心要求只有以下几个：
+已经很多，我就不再赘述了，请参考已有教程自行完成透明代理的nftables配置，核心要求只有以下几个：
 
-* 只支持TPORXY模式的透明代理，请勿配置成REDIRECT模式。
+* 只支持TPROXY模式的透明代理，请勿配置成REDIRECT模式。
 * 需要拦截UDP53的DNS查询请求，并转交给V2Ray内置DNS处理
 * 强烈推荐替换V2Ray的默认geoip/geosite规则文件为社区增强版本的 [Loyalsoldier/v2ray-rules-dat](https://github.com/Loyalsoldier/v2ray-rules-dat)
 
@@ -532,6 +534,8 @@ May 10 17:07:05 debian v2ray[195546]: 2024/05/10 17:07:05 192.168.88.192:44383 a
 首先，检查nftables配置，运行命令 `nft list ruleset`
 
 你的配置应该和下面的输出类似，注意不要照抄。按自己实际情况确认。
+
+**⚠️：以下nftables配置包含了透明代理（TProxy）的配置，本教程中未直接列出透明代理的配置命令，请查阅上文自行进行透明代理的配置。**
 
 ```shell
 root@debian:~# nft list ruleset
@@ -1467,5 +1471,5 @@ ROSv7可直接使用`Tools - Netwatch`新建探活任务，照下图设置即可
 所以，在收到退出信号时，旁路由广播废止路由表后，其实在等待主路由对于废止条目的确认，这个一般需要1-2秒。
 
 
-# Stargazers over time 
+# Stargazers over time
 [![Stargazers over time](https://starchart.cc/povsister/v2ray-core.svg?variant=adaptive)](https://starchart.cc/povsister/v2ray-core)
