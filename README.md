@@ -59,6 +59,7 @@ please submit it to [upstream project](https://github.com/v2fly/v2ray-core).
 * [FAQs](#faqs)
   * [OSPF 收敛速度快吗？](#ospf-收敛速度快吗)
   * [这个修改版的V2Ray为什么关闭有点慢](#这个修改版的v2ray为什么关闭有点慢)
+* [Stargazers over time](#stargazers-over-time-)
 <!-- TOC -->
 
 # Related Links
@@ -1466,4 +1467,5 @@ ROSv7可直接使用`Tools - Netwatch`新建探活任务，照下图设置即可
 所以，在收到退出信号时，旁路由广播废止路由表后，其实在等待主路由对于废止条目的确认，这个一般需要1-2秒。
 
 
-
+# Stargazers over time 
+[![Stargazers over time](https://starchart.cc/povsister/v2ray-core.svg?variant=adaptive)](https://starchart.cc/povsister/v2ray-core)
