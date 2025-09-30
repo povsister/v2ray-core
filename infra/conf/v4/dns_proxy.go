@@ -9,10 +9,11 @@ import (
 )
 
 type DNSOutboundConfig struct {
-	Network   cfgcommon.Network  `json:"network"`
-	Address   *cfgcommon.Address `json:"address"`
-	Port      uint16             `json:"port"`
-	UserLevel uint32             `json:"userLevel"`
+	Network    cfgcommon.Network  `json:"network"`
+	Address    *cfgcommon.Address `json:"address"`
+	Port       uint16             `json:"port"`
+	UserLevel  uint32             `json:"userLevel"`
+	NonIPQuery string             `json:"nonIPQuery"`
 }
 
 func (c *DNSOutboundConfig) Build() (proto.Message, error) {
@@ -21,7 +22,8 @@ func (c *DNSOutboundConfig) Build() (proto.Message, error) {
 			Network: c.Network.Build(),
 			Port:    uint32(c.Port),
 		},
-		UserLevel: c.UserLevel,
+		UserLevel:   c.UserLevel,
+		Non_IPQuery: c.NonIPQuery,
 	}
 	if c.Address != nil {
 		config.Server.Address = c.Address.Build()
