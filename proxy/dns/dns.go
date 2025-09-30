@@ -208,16 +208,24 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.
 
 			if !h.isOwnLink(ctx) {
 				isIPQuery, domain, id, qType := parseIPQuery(b.Bytes())
-				if isIPQuery || h.nonIPQuery != "drop" {
+				if isIPQuery {
 					if domain, err := strmatcher.ToDomain(domain); err == nil {
 						go h.handleIPQuery(ctx, id, qType, domain, writer)
+						continue
 					} else {
 						h.handleDNSError(id, dnsmessage.RCodeFormatError, writer)
+						continue
 					}
 				} else {
-					h.handleDNSError(id, dnsmessage.RCodeNotImplemented, writer)
+					if h.nonIPQuery == "drop" {
+						h.handleDNSError(id, dnsmessage.RCodeNotImplemented, writer)
+						continue
+					}
+					// if not specified as "drop", just pass it through
 				}
-			} else if err := connWriter.WriteMessage(b); err != nil {
+			}
+
+			if err := connWriter.WriteMessage(b); err != nil {
 				return err
 			}
 		}
