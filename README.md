@@ -362,6 +362,11 @@ V2ray的默认配置文件路径为 `/usr/local/etc/v2ray/config.json`
       //（必填）dns outbound，用于接受DNS请求
       "tag": "dns-out",
       "protocol": "dns",
+      "settings": {
+        // 非IP查询请求，默认是skip（即透传），
+        // 可修改为drop（丢弃A和AAAA以外的所有查询并返回NOTIMP错误）
+        "nonIPQuery": "skip"
+      },
       "streamSettings": {
         "sockopt": {
           "mark": 255
@@ -980,6 +985,11 @@ ROSv7可直接使用`Tools - Netwatch`新建探活任务，照下图设置即可
       //（必填）dns outbound，用于接受DNS请求
       "tag": "dns-out",
       "protocol": "dns",
+      "settings": {
+        // 非IP查询请求，默认是skip（即透传），
+        // 可修改为drop（丢弃A和AAAA以外的所有查询并返回NOTIMP错误）
+        "nonIPQuery": "skip"
+      },
       "streamSettings": {
         "sockopt": {
           // sock mark不能删，必须和透明代理配置相对应
