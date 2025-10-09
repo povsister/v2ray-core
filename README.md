@@ -364,7 +364,8 @@ V2ray的默认配置文件路径为 `/usr/local/etc/v2ray/config.json`
       "protocol": "dns",
       "settings": {
         // 非IP查询请求，默认是skip（即透传），
-        // 可修改为drop（丢弃A和AAAA以外的所有查询并返回NOTIMP错误）
+        // 可修改为 drop（丢弃A和AAAA以外的所有查询）
+        // 或者 reject (丢弃A和AAAA以外的所有查询，并返回Refused错误)
         "nonIPQuery": "skip"
       },
       "streamSettings": {
@@ -987,7 +988,8 @@ ROSv7可直接使用`Tools - Netwatch`新建探活任务，照下图设置即可
       "protocol": "dns",
       "settings": {
         // 非IP查询请求，默认是skip（即透传），
-        // 可修改为drop（丢弃A和AAAA以外的所有查询并返回NOTIMP错误）
+        // 可修改为 drop（丢弃A和AAAA以外的所有查询）
+        // 或者 reject (丢弃A和AAAA以外的所有查询，并返回Refused错误)
         "nonIPQuery": "skip"
       },
       "streamSettings": {

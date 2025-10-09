@@ -213,12 +213,16 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.
 						go h.handleIPQuery(ctx, id, qType, domain, writer)
 						continue
 					} else {
-						h.handleDNSError(id, dnsmessage.RCodeFormatError, writer)
+						h.handleDNSError(id, qType, domain, dnsmessage.RCodeFormatError, writer)
 						continue
 					}
-				} else {
-					if h.nonIPQuery == "drop" {
-						h.handleDNSError(id, dnsmessage.RCodeNotImplemented, writer)
+				} else if qType != 0 { // make sure it's not a non-IP query
+					switch h.nonIPQuery {
+					case "drop":
+						// do nothing
+						continue
+					case "reject":
+						h.handleDNSError(id, qType, domain, dnsmessage.RCodeRefused, writer)
 						continue
 					}
 					// if not specified as "drop", just pass it through
@@ -338,7 +342,7 @@ func (h *Handler) handleIPQuery(ctx context.Context, id uint16, qType dnsmessage
 	}
 }
 
-func (h *Handler) handleDNSError(id uint16, rCode dnsmessage.RCode, writer dns_proto.MessageWriter) {
+func (h *Handler) handleDNSError(id uint16, qType dnsmessage.Type, domain string, rCode dnsmessage.RCode, writer dns_proto.MessageWriter) {
 	var err error
 
 	b := buf.New()
@@ -352,6 +356,11 @@ func (h *Handler) handleDNSError(id uint16, rCode dnsmessage.RCode, writer dns_p
 	})
 	builder.EnableCompression()
 	common.Must(builder.StartQuestions())
+	common.Must(builder.Question(dnsmessage.Question{
+		Name:  dnsmessage.MustNewName(domain),
+		Class: dnsmessage.ClassINET,
+		Type:  qType,
+	}))
 	common.Must(builder.StartAnswers())
 
 	msgBytes, err := builder.Finish()
